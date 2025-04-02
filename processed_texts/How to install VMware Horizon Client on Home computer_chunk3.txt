@@ -1,0 +1,1 @@
+Once you enter your username and password, you will need to open up DUO on your phone and approve the connection. After you have authenticated and have been granted access, you will see a Windows 10 virtualized desktop option. Double click your VDI session. You will now be presented with your VDI Session and can start working as you normally would.

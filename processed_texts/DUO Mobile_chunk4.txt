@@ -1,0 +1,1 @@
+password you will be prompted on your phone to confirm the login through DUO. After accepting the connection you will granted access to VDI, Outlook, and remote desktop to connect to your physical machine in the office.
