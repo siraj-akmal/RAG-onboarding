@@ -23,9 +23,13 @@ def ask():
         # Get response from the chatbot
         result = chatbot.perform_knn_search(question)
         
+        # Generate suggested follow-up questions
+        suggested_questions = chatbot.generate_suggested_questions(result['response'])
+        
         return jsonify({
             'response': result['response'],
-            'matching_chunks': result['matching_chunks']
+            'matching_chunks': result['matching_chunks'],
+            'suggested_questions': suggested_questions
         })
         
     except Exception as e:

@@ -3,6 +3,7 @@ import redis
 import numpy as np
 from redis.commands.search.query import Query
 from typing import List, Dict, Union
+import json
 
 class RAGChatbot:
     def __init__(
@@ -45,6 +46,44 @@ class RAGChatbot:
             return response["embedding"]
         except Exception as e:
             raise Exception(f"Error generating embedding: {str(e)}")
+
+    def generate_suggested_questions(self, response: str) -> List[str]:
+        """
+        Generate suggested follow-up questions based on the response.
+        
+        Args:
+            response: The bot's response to generate questions from
+            
+        Returns:
+            List of suggested follow-up questions
+        """
+        try:
+            prompt = f"""Based on the following response, generate 3-4 relevant follow-up questions that a user might ask.
+            The questions should be specific, clear, and directly related to the information provided.
+            Format the response as a JSON array of strings.
+            
+            Response:
+            {response}
+            
+            Example format:
+            ["What are the specific AI tools used in investment analysis?", "How does human oversight work with AI tools?", "What are the main risks of using AI in investment decisions?"]
+            """
+            
+            result = ollama.chat(
+                model=self.llm_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that generates relevant follow-up questions."},
+                    {"role": "user", "content": prompt}
+                ],
+            )
+            
+            # Parse the response to get the questions
+            questions = json.loads(result["message"]["content"])
+            return questions[:4]  # Return at most 4 questions
+            
+        except Exception as e:
+            print(f"Error generating suggested questions: {str(e)}")
+            return []
 
     def query_llm(self, query: str, matching_chunks: List[str]) -> str:
         """

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HR Onboarding Assistant</title>
+    <title>Arrowstreet Capital Onboarding Assistant</title>
     <style>
         * {
             margin: 0;
@@ -90,6 +90,31 @@
             color: #2c3e50;
         }
 
+        .suggested-questions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            padding: 0 20px;
+        }
+
+        .suggested-question {
+            background: #e3f2fd;
+            color: #2c3e50;
+            padding: 8px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #2c3e50;
+        }
+
+        .suggested-question:hover {
+            background: #2c3e50;
+            color: white;
+            transform: translateY(-2px);
+        }
+
         .input-container {
             padding: 20px;
             background: white;
@@ -163,7 +188,7 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>HR Onboarding Assistant</h1>
+            <h1>Arrowstreet Capital Onboarding Assistant</h1>
         </div>
         <div class="chat-messages" id="chat-messages">
             <div class="message bot-message">
@@ -180,6 +205,7 @@
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        let currentSuggestedQuestions = null;
 
         function createTypingIndicator() {
             const typingDiv = document.createElement('div');
@@ -201,18 +227,54 @@
             return message;
         }
 
-        function addMessage(message, isUser = false) {
+        function createSuggestedQuestions(questions) {
+            // Remove any existing suggested questions
+            if (currentSuggestedQuestions) {
+                currentSuggestedQuestions.remove();
+            }
+
+            // Limit to 3 questions
+            questions = questions.slice(0, 3);
+
+            const container = document.createElement('div');
+            container.className = 'suggested-questions';
+            
+            questions.forEach(question => {
+                const questionButton = document.createElement('div');
+                questionButton.className = 'suggested-question';
+                questionButton.textContent = question;
+                questionButton.addEventListener('click', () => {
+                    messageInput.value = question;
+                    sendMessage();
+                });
+                container.appendChild(questionButton);
+            });
+            
+            currentSuggestedQuestions = container;
+            return container;
+        }
+
+        function addMessage(message, isUser = false, suggestedQuestions = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
             
             if (isUser) {
                 messageDiv.textContent = message;
+                // Remove suggested questions when user sends a new message
+                if (currentSuggestedQuestions) {
+                    currentSuggestedQuestions.remove();
+                    currentSuggestedQuestions = null;
+                }
             } else {
                 messageDiv.innerHTML = formatMessage(message);
+                
+                if (suggestedQuestions && suggestedQuestions.length > 0) {
+                    const questionsContainer = createSuggestedQuestions(suggestedQuestions);
+                    messageDiv.appendChild(questionsContainer);
+                }
             }
             
             chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         async function sendMessage() {
@@ -226,7 +288,6 @@
             // Create and show typing indicator
             const typingIndicator = createTypingIndicator();
             chatMessages.appendChild(typingIndicator);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
 
             try {
                 const response = await fetch('/ask', {
@@ -244,7 +305,7 @@
 
                 if (response.ok) {
                     // Add bot response to chat
-                    addMessage(data.response);
+                    addMessage(data.response, false, data.suggested_questions);
                 } else {
                     throw new Error(data.error || 'Something went wrong');
                 }
