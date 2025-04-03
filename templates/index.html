@@ -193,6 +193,11 @@
         <div class="chat-messages" id="chat-messages">
             <div class="message bot-message">
                 Hello! I'm your HR onboarding assistant. How can I help you today?
+                <div class="suggested-questions">
+                    <div class="suggested-question" onclick="handleDefaultQuestion('What is Arrowstreet Capital?')">What is Arrowstreet Capital?</div>
+                    <div class="suggested-question" onclick="handleDefaultQuestion('How do I set up remote work?')">How do I set up remote work?</div>
+                    <div class="suggested-question" onclick="handleDefaultQuestion('What compliance rules do I have to follow?')">What compliance rules do I have to follow?</div>
+                </div>
             </div>
         </div>
         <div class="input-container">
@@ -206,6 +211,11 @@
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
         let currentSuggestedQuestions = null;
+
+        function handleDefaultQuestion(question) {
+            messageInput.value = question;
+            sendMessage();
+        }
 
         function createTypingIndicator() {
             const typingDiv = document.createElement('div');

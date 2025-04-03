@@ -4,6 +4,9 @@ import numpy as np
 from redis.commands.search.query import Query
 from typing import List, Dict, Union
 import json
+import concurrent.futures
+from functools import lru_cache
+import hashlib
 
 class RAGChatbot:
     def __init__(
@@ -13,7 +16,8 @@ class RAGChatbot:
         redis_db: int = 0,
         llm_model: str = "llama3.2:latest",
         index_name: str = "embedding_index",
-        doc_prefix: str = "doc:"
+        doc_prefix: str = "doc:",
+        cache_size: int = 100
     ):
         """
         Initialize the RAG Chatbot with specified configuration.
@@ -25,15 +29,20 @@ class RAGChatbot:
             llm_model: Name of the LLM model to use
             index_name: Name of the Redis index
             doc_prefix: Prefix for document keys in Redis
+            cache_size: Size of the LRU cache for responses
         """
         self.redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db)
         self.llm_model = llm_model
         self.index_name = index_name
         self.doc_prefix = doc_prefix
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        self.cache_size = cache_size
 
+    @lru_cache(maxsize=100)
     def get_embedding(self, text: str) -> List[float]:
         """
         Generate an embedding for the given text using Ollama.
+        Results are cached using LRU cache.
         
         Args:
             text: The input text to be embedded
@@ -46,6 +55,17 @@ class RAGChatbot:
             return response["embedding"]
         except Exception as e:
             raise Exception(f"Error generating embedding: {str(e)}")
+
+    def _cache_key(self, query: str, chunks: List[str]) -> str:
+        """Generate a cache key for the query and chunks."""
+        content = query + "".join(chunks)
+        return hashlib.md5(content.encode()).hexdigest()
+
+    @lru_cache(maxsize=100)
+    def _cached_query_llm(self, cache_key: str, query: str, chunks_str: str) -> str:
+        """Cached version of query_llm."""
+        chunks = chunks_str.split("|||")
+        return self.query_llm(query, chunks)
 
     def generate_suggested_questions(self, response: str) -> List[str]:
         """
@@ -77,9 +97,8 @@ class RAGChatbot:
                 ],
             )
             
-            # Parse the response to get the questions
             questions = json.loads(result["message"]["content"])
-            return questions[:4]  # Return at most 4 questions
+            return questions[:4]
             
         except Exception as e:
             print(f"Error generating suggested questions: {str(e)}")
@@ -139,13 +158,14 @@ class RAGChatbot:
         except Exception as e:
             raise Exception(f"Error querying LLM: {str(e)}")
 
-    def perform_knn_search(self, query_text: str, k: int = 5) -> Dict[str, Union[str, List[str]]]:
+    def perform_knn_search(self, query_text: str, k: int = 3) -> Dict[str, Union[str, List[str]]]:
         """
         Perform a K-Nearest Neighbors search and get a response from the LLM.
+        Uses parallel processing and caching for better performance.
         
         Args:
             query_text: The text query to search for
-            k: Number of nearest neighbors to retrieve
+            k: Number of nearest neighbors to retrieve (reduced from 5 to 3 for faster responses)
             
         Returns:
             Dictionary containing the response and matching chunks
@@ -171,11 +191,19 @@ class RAGChatbot:
                     "matching_chunks": []
                 }
             
-            response = self.query_llm(query_text, matching_chunks)
+            # Use caching for LLM responses
+            cache_key = self._cache_key(query_text, matching_chunks)
+            chunks_str = "|||".join(matching_chunks)
+            response = self._cached_query_llm(cache_key, query_text, chunks_str)
+            
+            # Generate suggested questions in parallel
+            future_questions = self.executor.submit(self.generate_suggested_questions, response)
+            suggested_questions = future_questions.result()
             
             return {
                 "response": response,
-                "matching_chunks": matching_chunks
+                "matching_chunks": matching_chunks,
+                "suggested_questions": suggested_questions
             }
         except Exception as e:
             raise Exception(f"Error performing KNN search: {str(e)}")
