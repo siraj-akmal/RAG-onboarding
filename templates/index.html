@@ -179,13 +179,90 @@
             animation-delay: 0.4s;
         }
 
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #2c3e50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.5;
+        }
+
         @keyframes typing {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-5px); }
         }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #end-session-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-20px);
+        }
+
+        #end-session-button.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        #end-session-button:hover {
+            background-color: #c0392b;
+        }
     </style>
 </head>
 <body>
+    <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">
+            Analyzing conversation and generating detailed summary...<br>
+            This may take a few moments.
+        </div>
+    </div>
+    <button id="end-session-button">End Session & Get Summary</button>
     <div class="chat-container">
         <div class="chat-header">
             <h1>Arrowstreet Capital Onboarding Assistant</h1>
@@ -210,7 +287,9 @@
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        const endSessionButton = document.getElementById('end-session-button');
         let currentSuggestedQuestions = null;
+        let conversationHistory = [];
 
         function handleDefaultQuestion(question) {
             messageInput.value = question;
@@ -264,27 +343,63 @@
             return container;
         }
 
-        function addMessage(message, isUser = false, suggestedQuestions = null) {
+        function addToHistory(role, content) {
+            conversationHistory.push({ role, content });
+        }
+
+        function showLoading() {
+            document.querySelector('.loading-overlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.querySelector('.loading-overlay').classList.remove('active');
+        }
+
+        endSessionButton.addEventListener('click', async () => {
+            // Check if there are any user questions in the conversation history
+            const hasQuestions = conversationHistory.some(msg => msg.role === 'user');
+            
+            if (!hasQuestions) {
+                alert('Please ask at least one question before ending the session.');
+                return;
+            }
+
+            try {
+                showLoading();
+                const response = await fetch('/generate_summary', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ history: conversationHistory })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    window.location.href = '/summary';
+                } else {
+                    hideLoading();
+                    console.error('Failed to generate summary');
+                    alert('Failed to generate summary. Please try again.');
+                }
+            } catch (error) {
+                hideLoading();
+                console.error('Error:', error);
+                alert('An error occurred while generating the summary. Please try again.');
+            }
+        });
+
+        function createMessage(text, isUser = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-            
-            if (isUser) {
-                messageDiv.textContent = message;
-                // Remove suggested questions when user sends a new message
-                if (currentSuggestedQuestions) {
-                    currentSuggestedQuestions.remove();
-                    currentSuggestedQuestions = null;
-                }
-            } else {
-                messageDiv.innerHTML = formatMessage(message);
-                
-                if (suggestedQuestions && suggestedQuestions.length > 0) {
-                    const questionsContainer = createSuggestedQuestions(suggestedQuestions);
-                    messageDiv.appendChild(questionsContainer);
-                }
-            }
-            
+            messageDiv.innerHTML = isUser ? text : formatMessage(text);
             chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // Add to conversation history
+            addToHistory(isUser ? 'user' : 'assistant', text);
+            
+            return messageDiv;
         }
 
         async function sendMessage() {
@@ -292,7 +407,7 @@
             if (!message) return;
 
             // Add user message to chat
-            addMessage(message, true);
+            const userMessage = createMessage(message, true);
             messageInput.value = '';
 
             // Create and show typing indicator
@@ -315,7 +430,15 @@
 
                 if (response.ok) {
                     // Add bot response to chat
-                    addMessage(data.response, false, data.suggested_questions);
+                    const botMessage = createMessage(data.response, false);
+                    
+                    if (data.suggested_questions && data.suggested_questions.length > 0) {
+                        const questionsContainer = createSuggestedQuestions(data.suggested_questions);
+                        botMessage.appendChild(questionsContainer);
+                    }
+
+                    // Show end session button after first question is answered
+                    endSessionButton.classList.add('visible');
                 } else {
                     throw new Error(data.error || 'Something went wrong');
                 }
@@ -324,7 +447,7 @@
                 typingIndicator.remove();
                 
                 // Show error message
-                addMessage(`Error: ${error.message}`);
+                createMessage(`Error: ${error.message}`);
             }
         }
 
