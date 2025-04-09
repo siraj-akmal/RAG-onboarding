@@ -26,7 +26,7 @@ def generate_conversation_summary(history):
         3. Action items or next steps
         4. Areas that might need follow-up
 
-        Format the response in HTML with appropriate sections and bullet points.
+        Please format the response in plain text and full sentences in a paragraph.
 
         Conversation:
         {formatted_history}
@@ -38,7 +38,7 @@ def generate_conversation_summary(history):
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a skilled assistant that creates clear, well-structured summaries of conversations. Format your response in HTML with proper sections and bullet points."
+                    "content": "You are a skilled assistant that creates clear, well-structured summaries of conversations. Format your response in plain text and full sentences."
                 },
                 {
                     "role": "user",
